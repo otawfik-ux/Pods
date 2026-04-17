@@ -25,10 +25,19 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => Alert.alert('Log Out', 'Are you sure?', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Log Out', style: 'destructive', onPress: logoutUser },
-  ]);
-
+  { text: 'Cancel', style: 'cancel' },
+  { 
+    text: 'Log Out', 
+    style: 'destructive', 
+    onPress: async () => {
+      try {
+        await logoutUser();
+      } catch (err: any) {
+        Alert.alert('Error', err.message);
+      }
+    }
+  },
+]);
   const joinDate = new Date(userProfile.joinDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const s = makeStyles(colors);
 
