@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -14,6 +14,7 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState(userProfile?.bio ?? '');
   const [displayName, setDisplayName] = useState(userProfile?.displayName ?? '');
   const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   if (!userProfile) return null;
 
@@ -24,20 +25,37 @@ export default function ProfileScreen() {
     finally { setSaving(false); }
   };
 
-  const handleLogout = () => Alert.alert('Log Out', 'Are you sure?', [
-  { text: 'Cancel', style: 'cancel' },
-  { 
-    text: 'Log Out', 
-    style: 'destructive', 
-    onPress: async () => {
-      try {
-        await logoutUser();
-      } catch (err: any) {
-        Alert.alert('Error', err.message);
+  const confirmLogout = () => {
+    if (Platform.OS === 'web') {
+      const shouldLogout = typeof window === 'undefined' || typeof window.confirm !== 'function'
+        ? true
+        : window.confirm('Are you sure you want to log out?');
+
+      if (shouldLogout) {
+        void handleLogout();
       }
+      return;
     }
-  },
-]);
+
+    Alert.alert('Log Out', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: handleLogout,
+      },
+    ]);
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logoutUser();
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+      setLoggingOut(false);
+    }
+  };
   const joinDate = new Date(userProfile.joinDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const s = makeStyles(colors);
 
@@ -49,8 +67,15 @@ export default function ProfileScreen() {
           <TouchableOpacity onPress={toggleTheme} style={s.iconBtn}>
             <Ionicons name={isDark ? 'sunny' : 'moon'} size={22} color={colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout} style={s.iconBtn}>
-            <Ionicons name="log-out-outline" size={24} color={colors.danger} />
+          <TouchableOpacity onPress={confirmLogout} style={s.logoutBtn} disabled={loggingOut}>
+            {loggingOut ? (
+              <ActivityIndicator size="small" color={colors.danger} />
+            ) : (
+              <>
+                <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+                <Text style={s.logoutText}>Log Out</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -134,6 +159,8 @@ const makeStyles = (c: ReturnType<typeof useTheme>['colors']) => StyleSheet.crea
   title: { fontSize: 28, fontWeight: '800', color: c.text },
   headerActions: { flexDirection: 'row', gap: 4 },
   iconBtn: { padding: 6 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
+  logoutText: { fontSize: 14, fontWeight: '700', color: c.danger },
   scroll: { padding: 20, paddingBottom: 40 },
   profileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: c.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 2 },
   profileInfo: { marginLeft: 16, flex: 1 },

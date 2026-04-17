@@ -18,23 +18,53 @@ export default function RegisterScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [formError, setFormError] = useState('');
 
   const detectedUniversity = email.includes('@') && isEduEmail(email) ? getUniversityFromEmail(email) : null;
 
   const handleEmailChange = (val: string) => {
     setEmail(val);
-    setEmailError(val.includes('@') && !isEduEmail(val) ? 'Please use your .edu college email address' : '');
+    setFormError('');
+    setEmailError(val.includes('@') && !isEduEmail(val) ? 'Please use a valid college email address.' : '');
+  };
+
+  const handlePasswordChange = (val: string) => {
+    setPassword(val);
+    setFormError('');
+    if (!val.length) {
+      setPasswordError('');
+      return;
+    }
+
+    setPasswordError(val.length < 6 ? 'Password must be at least 6 characters.' : '');
+  };
+
+  const showFormError = (message: string) => {
+    setFormError(message);
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert(message);
+      }
+      return;
+    }
+
+    Alert.alert('Registration Failed', message);
   };
 
   const handleRegister = async () => {
-    if (!displayName.trim()) return Alert.alert('Error', 'Please enter your name');
-    if (!isEduEmail(email)) return Alert.alert('Error', 'Please use a .edu email address');
-    if (password.length < 6) return Alert.alert('Error', 'Password must be at least 6 characters');
+    setFormError('');
+    if (!displayName.trim()) return showFormError('Please enter your name.');
+    if (!isEduEmail(email)) return showFormError('Please use a valid college email address.');
+    if (password.length < 6) {
+      setPasswordError('Password must be at least 6 characters.');
+      return showFormError('Password must be at least 6 characters.');
+    }
     setLoading(true);
     try {
       await registerUser(email.trim().toLowerCase(), password, displayName.trim());
     } catch (err: any) {
-      Alert.alert('Registration Failed', err.message);
+      showFormError(err.message);
     } finally {
       setLoading(false);
     }
@@ -74,13 +104,16 @@ export default function RegisterScreen({ navigation }: Props) {
 
           <View style={s.field}>
             <Text style={s.label}>Password</Text>
-            <TextInput style={s.input} placeholder="Min. 6 characters" placeholderTextColor={colors.subtext}
-              value={password} onChangeText={setPassword} secureTextEntry />
+            <TextInput style={[s.input, passwordError ? s.inputError : null]} placeholder="Min. 6 characters" placeholderTextColor={colors.subtext}
+              value={password} onChangeText={handlePasswordChange} secureTextEntry />
+            {passwordError ? <Text style={s.errorText}>{passwordError}</Text> : null}
           </View>
 
           <TouchableOpacity style={[s.submitBtn, loading && s.submitBtnDisabled]} onPress={handleRegister} disabled={loading}>
             {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.submitBtnText}>Create Account</Text>}
           </TouchableOpacity>
+
+          {formError ? <Text style={s.formErrorText}>{formError}</Text> : null}
 
           <TouchableOpacity onPress={() => navigation.navigate('Login')} style={s.loginLink}>
             <Text style={s.loginLinkText}>Already have an account? <Text style={s.loginLinkBold}>Log In</Text></Text>
@@ -108,6 +141,7 @@ const makeStyles = (c: ReturnType<typeof useTheme>['colors']) => StyleSheet.crea
   submitBtn: { backgroundColor: c.primary, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8, marginBottom: 20 },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 17 },
+  formErrorText: { color: c.danger, fontSize: 13, textAlign: 'center', marginBottom: 16 },
   loginLink: { alignItems: 'center' },
   loginLinkText: { color: c.subtext, fontSize: 15 },
   loginLinkBold: { color: c.primary, fontWeight: '700' },
