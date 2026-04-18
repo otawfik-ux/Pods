@@ -1,16 +1,17 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  FlatList, Alert, TextInput, KeyboardAvoidingView, Platform,
+  FlatList, Alert, TextInput, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { PodsStackParamList, Pod, Activity, Message } from '../../types';
+import { PodsStackParamList, Pod, Activity, Message, User } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { getPod, joinPod, leavePod } from '../../services/pods';
+import { getPod, joinPod, leavePod, grantAdmin, removeAdmin } from '../../services/pods';
+import { getUserProfile } from '../../services/auth';
 import { getActivitiesForPod, requestJoinActivity } from '../../services/activities';
 import { sendPodMessage, subscribeToPodMessages } from '../../services/chat';
 import ActivityCard from '../../components/ActivityCard';
@@ -42,6 +43,12 @@ export default function PodDetailScreen({ navigation, route }: Props) {
   const [sending, setSending] = useState(false);
   const chatListRef = useRef<FlatList>(null);
 
+  // Members state
+  const [memberProfiles, setMemberProfiles] = useState<Record<string, User>>({});
+  const [selectedMember, setSelectedMember] = useState<User | null>(null);
+  const [memberModalVisible, setMemberModalVisible] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(false);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -68,6 +75,22 @@ export default function PodDetailScreen({ navigation, route }: Props) {
     });
     return unsub;
   }, [podId]);
+
+  // Fetch member profiles when pod data is available
+  useEffect(() => {
+    if (!pod) return;
+    const fetchProfiles = async () => {
+      const profiles: Record<string, User> = {};
+      for (const memberId of pod.members) {
+        try {
+          const profile = await getUserProfile(memberId);
+          if (profile) profiles[memberId] = profile;
+        } catch {}
+      }
+      setMemberProfiles(profiles);
+    };
+    fetchProfiles();
+  }, [pod?.members.length]);
 
   const s = makeStyles(colors);
 
@@ -111,6 +134,42 @@ export default function PodDetailScreen({ navigation, route }: Props) {
     setSending(true);
     try { await sendPodMessage(podId, uid, userProfile.displayName, chatText.trim()); setChatText(''); }
     finally { setSending(false); }
+  };
+
+  const handleMemberTap = (memberId: string) => {
+    const profile = memberProfiles[memberId];
+    if (profile) {
+      setSelectedMember(profile);
+      setMemberModalVisible(true);
+    }
+  };
+
+  const handleGrantAdmin = async (memberId: string) => {
+    setAdminLoading(true);
+    try {
+      await grantAdmin(podId, memberId);
+      await load();
+      Alert.alert('Success', `${memberProfiles[memberId]?.displayName ?? 'Member'} is now an admin.`);
+      setMemberModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Failed to grant admin');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleRemoveAdmin = async (memberId: string) => {
+    setAdminLoading(true);
+    try {
+      await removeAdmin(podId, memberId);
+      await load();
+      Alert.alert('Success', `${memberProfiles[memberId]?.displayName ?? 'Member'} is no longer an admin.`);
+      setMemberModalVisible(false);
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Failed to remove admin');
+    } finally {
+      setAdminLoading(false);
+    }
   };
 
   const renderContent = () => {
@@ -188,15 +247,22 @@ export default function PodDetailScreen({ navigation, route }: Props) {
         <FlatList
           data={pod.members}
           keyExtractor={(m) => m}
-          renderItem={({ item: memberId }) => (
-            <View style={s.memberRow}>
-              <AvatarInitials name={memberId === uid ? userProfile?.displayName ?? 'You' : 'Member'} size={40} />
-              <View style={s.memberInfo}>
-                <Text style={s.memberName}>{memberId === uid ? (userProfile?.displayName ?? 'You') + ' (You)' : 'Member'}</Text>
-                {pod.admins.includes(memberId) && <Text style={s.adminBadge}>Admin</Text>}
-              </View>
-            </View>
-          )}
+          renderItem={({ item: memberId }) => {
+            const profile = memberProfiles[memberId];
+            const name = profile?.displayName ?? (memberId === uid ? userProfile?.displayName ?? 'You' : 'Loading...');
+            const isMe = memberId === uid;
+            return (
+              <TouchableOpacity style={s.memberRow} onPress={() => handleMemberTap(memberId)} activeOpacity={0.6}>
+                <AvatarInitials name={name} size={40} />
+                <View style={s.memberInfo}>
+                  <Text style={s.memberName}>{name}{isMe ? ' (You)' : ''}</Text>
+                  {pod.admins.includes(memberId) && <Text style={s.adminBadge}>Admin</Text>}
+                  {profile?.university ? <Text style={s.memberUniversity}>{profile.university}</Text> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.subtext} />
+              </TouchableOpacity>
+            );
+          }}
           contentContainerStyle={s.memberList}
           showsVerticalScrollIndicator={false}
         />
@@ -267,6 +333,104 @@ export default function PodDetailScreen({ navigation, route }: Props) {
           <Ionicons name="add" size={28} color="#FFFFFF" />
         </TouchableOpacity>
       )}
+
+      {/* Member Profile Modal */}
+      <Modal
+        visible={memberModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setMemberModalVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={[s.modalContent, { backgroundColor: colors.card }]}>
+            <View style={s.modalHeader}>
+              <Text style={[s.modalTitle, { color: colors.text }]}>Member Profile</Text>
+              <TouchableOpacity onPress={() => setMemberModalVisible(false)}>
+                <Ionicons name="close" size={24} color={colors.subtext} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedMember && (
+              <View style={s.profileSection}>
+                <AvatarInitials name={selectedMember.displayName} size={72} />
+                <Text style={[s.profileName, { color: colors.text }]}>{selectedMember.displayName}</Text>
+                <Text style={[s.profileEmail, { color: colors.subtext }]}>{selectedMember.email}</Text>
+                {selectedMember.university ? (
+                  <Text style={[s.profileUniversity, { color: colors.primary }]}>{selectedMember.university}</Text>
+                ) : null}
+
+                <View style={s.profileStats}>
+                  <View style={s.statItem}>
+                    <Text style={[s.statNumber, { color: colors.text }]}>{selectedMember.podsJoined?.length ?? 0}</Text>
+                    <Text style={[s.statLabel, { color: colors.subtext }]}>Pods</Text>
+                  </View>
+                  <View style={s.statItem}>
+                    <Text style={[s.statNumber, { color: colors.text }]}>{selectedMember.postsCount ?? 0}</Text>
+                    <Text style={[s.statLabel, { color: colors.subtext }]}>Posts</Text>
+                  </View>
+                  <View style={s.statItem}>
+                    <Text style={[s.statNumber, { color: colors.text }]}>{selectedMember.commendations ?? 0}</Text>
+                    <Text style={[s.statLabel, { color: colors.subtext }]}>Kudos</Text>
+                  </View>
+                </View>
+
+                {selectedMember.bio ? (
+                  <Text style={[s.profileBio, { color: colors.text }]}>{selectedMember.bio}</Text>
+                ) : null}
+
+                <Text style={[s.profileJoinDate, { color: colors.subtext }]}>
+                  Joined {new Date(selectedMember.joinDate).toLocaleDateString()}
+                </Text>
+
+                {/* Admin actions — only show if current user is admin AND the selected member is not themselves */}
+                {isAdmin && selectedMember.uid !== uid && (
+                  <View style={s.adminActions}>
+                    {pod.admins.includes(selectedMember.uid) ? (
+                      <TouchableOpacity
+                        style={[s.adminActionBtn, { borderColor: colors.danger }]}
+                        onPress={() => Alert.alert(
+                          'Remove Admin',
+                          `Remove admin privileges from ${selectedMember.displayName}?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Remove', style: 'destructive', onPress: () => handleRemoveAdmin(selectedMember.uid) },
+                          ]
+                        )}
+                        disabled={adminLoading}
+                      >
+                        {adminLoading ? (
+                          <ActivityIndicator size="small" color={colors.danger} />
+                        ) : (
+                          <Text style={[s.adminActionText, { color: colors.danger }]}>Remove Admin</Text>
+                        )}
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={[s.adminActionBtn, { borderColor: colors.primary }]}
+                        onPress={() => Alert.alert(
+                          'Grant Admin',
+                          `Make ${selectedMember.displayName} an admin of this pod?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Grant Admin', onPress: () => handleGrantAdmin(selectedMember.uid) },
+                          ]
+                        )}
+                        disabled={adminLoading}
+                      >
+                        {adminLoading ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Text style={[s.adminActionText, { color: colors.primary }]}>Grant Admin</Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -313,7 +477,27 @@ const makeStyles = (c: ReturnType<typeof useTheme>['colors']) => StyleSheet.crea
   memberInfo: { marginLeft: 14, flex: 1 },
   memberName: { fontSize: 15, fontWeight: '600', color: c.text },
   adminBadge: { fontSize: 12, color: c.primary, fontWeight: '500', marginTop: 2 },
+  memberUniversity: { fontSize: 12, color: c.subtext, marginTop: 2 },
   memberList: { paddingHorizontal: 4 },
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: c.border },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  // Profile section inside modal
+  profileSection: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20 },
+  profileName: { fontSize: 22, fontWeight: '800', marginTop: 14 },
+  profileEmail: { fontSize: 14, marginTop: 4 },
+  profileUniversity: { fontSize: 14, fontWeight: '600', marginTop: 4 },
+  profileStats: { flexDirection: 'row', marginTop: 20, gap: 32 },
+  statItem: { alignItems: 'center' },
+  statNumber: { fontSize: 20, fontWeight: '700' },
+  statLabel: { fontSize: 12, marginTop: 2 },
+  profileBio: { fontSize: 14, textAlign: 'center', marginTop: 16, lineHeight: 20, paddingHorizontal: 12 },
+  profileJoinDate: { fontSize: 12, marginTop: 12 },
+  adminActions: { marginTop: 24, width: '100%', paddingHorizontal: 12 },
+  adminActionBtn: { borderWidth: 1.5, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  adminActionText: { fontWeight: '600', fontSize: 15 },
   // Info
   infoTab: { padding: 20 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },

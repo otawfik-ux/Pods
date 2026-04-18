@@ -85,6 +85,18 @@ export async function leavePod(podId: string, userId: string): Promise<void> {
   });
 }
 
+export async function grantAdmin(podId: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, 'pods', podId), {
+    admins: arrayUnion(userId),
+  });
+}
+
+export async function removeAdmin(podId: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, 'pods', podId), {
+    admins: arrayRemove(userId),
+  });
+}
+
 export async function searchPods(searchTerm: string): Promise<Pod[]> {
   const all = await getPublicPods();
   const term = searchTerm.toLowerCase();
