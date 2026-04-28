@@ -1,6 +1,6 @@
 # PODS
 
-PODS is a cross-platform mobile and web application built with React Native, Expo, and Firebase. The app helps college students create and join temporary activity-based communities (“Pods”) for studying, socializing, events, fitness, and more.
+Pods is a cross-platform mobile and web application built with React Native, Expo, and Firebase. The app helps college students create and join temporary activity-based communities (“Pods”) for studying, socializing, events, fitness, and more.
 
 ## Tech Stack
 
@@ -15,26 +15,26 @@ PODS is a cross-platform mobile and web application built with React Native, Exp
 
 # Getting Started
 
-## 1. Clone the Repository
+## Step 1. Clone the Repository
 
 ```bash
 git clone https://github.com/otawfik-ux/Pods.git
 ```
 
-## 2. Navigate Into Project Directory 
+## Step 2. Navigate Into Project Directory 
 
 ```bash
 cd Pods
 ```
 
-## 2a. Make Sure Dependencies Are Installed 
+## Step 2a. Make Sure Dependencies Are Installed 
 - you want to have node.js installed, npm installed and on your mobile device download expo go
 - to install npm on your bash run the line
 ```bash
 npm install
 ```
 
-## 3. Starting the Server
+## Step 3. Starting the Server
 - run the line
 ```bash
 npx expo start
@@ -44,13 +44,13 @@ npx expo start
 npm start
 ```
 
-## 3a. Running on Mobile Device 
+## Step 4a. Running on Mobile Device 
 - make sure to download Expo Go app on IOS or android
 - keep phone and computer connected to same wifi network
 - scan the QR code that displays in the terminal after running the npx expo start command
 - this will launch the app for you to experiment with on your mobile device
 
-## 3b. Running on Computer 
+## Step 4b. Running on Computer 
 - after running npm expo start type
 ```bash
 w
